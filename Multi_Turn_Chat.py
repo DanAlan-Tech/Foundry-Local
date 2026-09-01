@@ -2,7 +2,7 @@ import sys
 from foundry_local_sdk import Configuration, FoundryLocalManager
 
 def main():
-    # Defensive runtime initialization wrap
+   
     config = Configuration(app_name="foundry_local_samples")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
@@ -17,12 +17,12 @@ def main():
             current_ep = ep_name
         print(f"\r  {ep_name:<30}  {percent:5.1f}%", end="", flush=True)
 
-    # Pull system Execution Providers safely
+  
     manager.download_and_register_eps(progress_callback=ep_progress)
     if current_ep:
         print()
 
-    # Load local model weights safely
+ 
     model_id = "qwen2.5-0.5b"
     print(f"Resolving model pipeline for: {model_id}")
     model = manager.catalog.get_model(model_id)
@@ -39,13 +39,12 @@ def main():
 
     client = model.get_chat_client()
 
-    # Base operating guidelines for the system role
     system_instruction = {
         "role": "system",
         "content": "You are a helpful, friendly assistant. Keep your responses concise and conversational. If you don't know something, say so.",
     }
     
-    # SECURITY NOTE: Maintain a strict history window limit to prevent Out-Of-Memory (OOM) state vectors
+ 
     MAX_HISTORY_TURNS = 10
     user_conversation_history = []
 
@@ -62,7 +61,7 @@ def main():
 
             user_conversation_history.append({"role": "user", "content": user_input})
 
-            # Assemble runtime payload safely balancing global system prompt + capped context slice
+       
             active_payload = [system_instruction] + user_conversation_history[-MAX_HISTORY_TURNS:]
 
             print("Assistant: ", end="", flush=True)
@@ -80,11 +79,11 @@ def main():
             user_conversation_history.append({"role": "assistant", "content": full_response})
 
     except KeyboardInterrupt:
-        # Prevent dirty stack traces from throwing when users issue an abrupt Ctrl+C escape
+     
         print("\nSession interrupted via system sequence.")
         
     finally:
-        # Enforce explicit memory de-allocation even if runtime exceptions disrupt processing
+     
         print("Cleaning system contexts...")
         model.unload()
         print("Model unloaded. Goodbye!")
