@@ -1,7 +1,6 @@
 import math
 from foundry_local_sdk import Configuration, FoundryLocalManager
 
-
 documents = [
     "Foundry Local runs AI models directly on your device without cloud connectivity.",
     "The Foundry Local SDK supports Python, C#, JavaScript, and Rust.",
@@ -13,14 +12,12 @@ documents = [
     "Chat completions generate natural language responses from a prompt and context.",
 ]
 
-
 def cosine_similarity(a, b):
-    """Compute cosine similarity between two vectors."""
+    """Compute cosine similarity between two vectors cleanly."""
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
-
 
 def find_relevant(query_embedding, doc_embeddings, top_k=2):
     """Return the indices and scores of the top-k most similar documents."""
@@ -31,15 +28,13 @@ def find_relevant(query_embedding, doc_embeddings, top_k=2):
     scores.sort(key=lambda x: x[1], reverse=True)
     return scores[:top_k]
 
-
 def main():
- 
     config = Configuration(app_name="foundry_local_rag")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
 
-  
-    embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
+    embedding_model_id = "qwen3-embedding-0.6b"
+    embedding_model = manager.catalog.get_model(embedding_model_id)
     embedding_model.download(
         lambda p: print(f"\rDownloading embedding model: {p:.1f}%", end="", flush=True)
     )
@@ -50,10 +45,11 @@ def main():
 
     response = embedding_client.generate_embeddings(documents)
     doc_embeddings = [item.embedding for item in response.data]
-    print(f"Indexed {len(doc_embeddings)} documents.")
+    print(f"Indexed {len(doc_embeddings)} documents locally.")
 
   
-    chat_model = manager.catalog.get_model("qwen2.5-0.5b")
+    chat_model_id = "qwen2.5-0.5b"
+    chat_model = manager.catalog.get_model(chat_model_id)
     chat_model.download(
         lambda p: print(f"\rDownloading chat model: {p:.1f}%", end="", flush=True)
     )
@@ -73,47 +69,52 @@ def main():
     print('  "What programming languages does the SDK support?"')
     print('  "How does Foundry Local run models?"')
     print('  "What is retrieval-augmented generation?"')
-    print('\nType "quit" to exit.\n')
+    print('\nType "quit" or "exit" to terminate application loop.\n')
 
+    try:
+        while True:
+            query = input("Question: ").strip()
+            if not query or query.lower() in ("quit", "exit"):
+                break
+
+            query_response = embedding_client.generate_embeddings([query])
+            query_embedding = query_response.data[0].embedding
+
+            
+            results = find_relevant(query_embedding, doc_embeddings, top_k=2)
+            context = "\n".join(f"- {documents[i]}" for i, _ in results)
+
+          
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer the user's question using only the provided context. "
+                        "If the context doesn't contain enough information, say so.\n\n"
+                        f"Context:\n{context}"
+                    ),
+                },
+                {"role": "user", "content": query},
+            ]
+
+            print("Answer: ", end="", flush=True)
+            for chunk in chat_client.complete_streaming_chat(messages):
+                
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    print(content, end="", flush=True)
+            print("\n")
+
+    except KeyboardInterrupt:
+        print("\nSession stopped via command line interrupt.")
+        
+    finally:
     
-    while True:
-        query = input("Question: ").strip()
-        if not query or query.lower() == "quit":
-            break
-
-      
-        query_response = embedding_client.generate_embedding(query)
-        query_embedding = query_response.data[0].embedding
-
-      
-        results = find_relevant(query_embedding, doc_embeddings, top_k=2)
-        context = "\n".join(f"- {documents[i]}" for i, _ in results)
-
-       
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Answer the user's question using only the provided context. "
-                    "If the context doesn't contain enough information, say so.\n\n"
-                    f"Context:\n{context}"
-                ),
-            },
-            {"role": "user", "content": query},
-        ]
-
-        print("Answer: ", end="", flush=True)
-        for chunk in chat_client.complete_streaming_chat(messages):
-            content = chunk.choices[0].delta.content
-            if content:
-                print(content, end="", flush=True)
-        print("\n")
-
-    
-    embedding_model.unload()
-    chat_model.unload()
-    print("Models unloaded. Done!")
-
+        print("\nDe-allocating operational memory blocks...")
+        embedding_model.unload()
+        chat_model.unload()
+        print("Models unloaded. Done!")
 
 if __name__ == "__main__":
     main()
+
